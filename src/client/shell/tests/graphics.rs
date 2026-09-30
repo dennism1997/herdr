@@ -279,6 +279,8 @@ fn every_dialog_and_menu_occludes_its_panel_not_the_whole_screen() {
             source_workspace_id: "ws_1".into(),
             repo_name: "repo".into(),
             branch: "branch".into(),
+            base: "HEAD".into(),
+            focus: ClientWorktreeCreateField::Branch,
             checkout_path: "path".into(),
             error: None,
             creating: false,

@@ -1277,6 +1277,135 @@ fn worktree_create_previews_the_endpoint_owned_checkout_path() {
     ));
 }
 
+fn open_worktree_create_overlay(state: &mut ClientShellState) {
+    let mut prepare = ClientShellInput::default();
+    state.record_binding(
+        crate::input::KeybindMatch::Action(crate::input::KeybindAction::NewWorktree),
+        &mut prepare,
+    );
+    let [ClientShellAction::Endpoint { request, .. }] = &prepare.actions[..] else {
+        panic!("new worktree should prepare through worktree.list");
+    };
+    let request_id = request.id.clone();
+    state.handle_endpoint_result("boot-1", &request_id, Ok(worktree_list_result(None)));
+}
+
+fn submitted_worktree_create_params(
+    submit: &ClientShellInput,
+) -> &crate::api::schema::WorktreeCreateParams {
+    let [ClientShellAction::Endpoint { request, .. }] = &submit.actions[..] else {
+        panic!("worktree create should use endpoint API");
+    };
+    let crate::api::schema::Method::WorktreeCreate(params) = &request.method else {
+        panic!("worktree create should submit worktree.create");
+    };
+    params
+}
+
+#[test]
+fn worktree_create_defaults_base_to_head() {
+    let mut state = ClientShellState::new(ClientShellConfig::from_config(&Config::default()));
+    state.set_snapshot(Box::new(snapshot()));
+    state.set_pane_surface(surface());
+    open_worktree_create_overlay(&mut state);
+
+    let submit = state.handle_input_bytes(b"\r");
+
+    assert_eq!(
+        submitted_worktree_create_params(&submit).base.as_deref(),
+        Some("HEAD")
+    );
+}
+
+#[test]
+fn worktree_create_tab_edits_the_base_branch() {
+    let mut state = ClientShellState::new(ClientShellConfig::from_config(&Config::default()));
+    state.set_snapshot(Box::new(snapshot()));
+    state.set_pane_surface(surface());
+    open_worktree_create_overlay(&mut state);
+    state.handle_input_bytes(b"feature/based");
+
+    state.handle_input_bytes(b"\t");
+    assert!(matches!(
+        &state.overlay,
+        Some(ClientShellOverlay::WorktreeCreate(create))
+            if create.focus == ClientWorktreeCreateField::Base
+    ));
+    // The prefilled base is replaced on first type, like the generated branch.
+    state.handle_input_bytes(b"origin/main");
+    assert!(matches!(
+        &state.overlay,
+        Some(ClientShellOverlay::WorktreeCreate(create))
+            if create.branch.as_str() == "feature/based"
+                && create.base.as_str() == "origin/main"
+                && create.checkout_path == "/tmp/herdr-worktrees/repo/feature-based"
+    ));
+    let frame = state.compose(106, 30).expect("new worktree modal");
+    let text = frame
+        .cells
+        .chunks(frame.width as usize)
+        .map(|row| {
+            row.iter()
+                .map(|cell| cell.symbol.as_str())
+                .collect::<String>()
+        })
+        .collect::<Vec<_>>()
+        .join("\n");
+    assert!(text.contains("based on"));
+    assert!(text.contains("origin/main"));
+
+    let submit = state.handle_input_bytes(b"\r");
+    let params = submitted_worktree_create_params(&submit);
+    assert_eq!(params.branch.as_deref(), Some("feature/based"));
+    assert_eq!(params.base.as_deref(), Some("origin/main"));
+}
+
+#[test]
+fn worktree_create_empty_base_falls_back_to_head() {
+    let mut state = ClientShellState::new(ClientShellConfig::from_config(&Config::default()));
+    state.set_snapshot(Box::new(snapshot()));
+    state.set_pane_surface(surface());
+    open_worktree_create_overlay(&mut state);
+    state.handle_input_bytes(b"\t");
+    state.handle_input_bytes(b"   ");
+
+    let submit = state.handle_input_bytes(b"\r");
+
+    assert_eq!(
+        submitted_worktree_create_params(&submit).base.as_deref(),
+        Some("HEAD")
+    );
+}
+
+#[test]
+fn worktree_create_click_focuses_the_base_field() {
+    let mut state = ClientShellState::new(ClientShellConfig::from_config(&Config::default()));
+    state.set_snapshot(Box::new(snapshot()));
+    state.set_pane_surface(surface());
+    open_worktree_create_overlay(&mut state);
+    state.compose(106, 30).expect("new worktree modal");
+    let (base, _) = state
+        .hits
+        .worktree_create_fields
+        .iter()
+        .copied()
+        .find(|(_, field)| *field == ClientWorktreeCreateField::Base)
+        .expect("base field hit");
+
+    state.handle_raw_events(vec![RawInputEvent::Mouse(MouseEvent {
+        kind: MouseEventKind::Down(MouseButton::Left),
+        column: base.x + 2,
+        row: base.y + 1,
+        modifiers: KeyModifiers::empty(),
+    })]);
+
+    assert!(matches!(
+        &state.overlay,
+        Some(ClientShellOverlay::WorktreeCreate(create))
+            if create.focus == ClientWorktreeCreateField::Base
+    ));
+}
+
 #[test]
 fn unavailable_worktree_create_does_not_wedge_the_overlay() {
     let mut state = ClientShellState::new(ClientShellConfig::from_config(&Config::default()));

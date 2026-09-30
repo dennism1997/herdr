@@ -1,5 +1,7 @@
 use super::*;
 
+const DEFAULT_WORKTREE_BASE: &str = "HEAD";
+
 fn checkout_path_preview(root: &str, repo: &str, branch: &str) -> String {
     // This is an endpoint path, not a path on the machine drawing the dialog.
     let separator = if !root.starts_with('/') && root.contains('\\') {
@@ -24,7 +26,7 @@ impl ClientShellState {
     pub(super) fn insert_worktree_overlay_text(&mut self, text: &str) -> bool {
         match self.overlay.as_mut() {
             Some(ClientShellOverlay::WorktreeCreate(create)) if !create.creating => {
-                if create.branch.insert(text) {
+                if create.focused_editor_mut().insert(text) {
                     self.sync_worktree_create_path();
                 }
                 true
@@ -60,7 +62,15 @@ impl ClientShellState {
                 if !creating {
                     if let Some(ClientShellOverlay::WorktreeCreate(create)) = self.overlay.as_mut()
                     {
-                        if let Some(content_changed) = create.branch.handle_key(key) {
+                        if matches!(
+                            code,
+                            KeyCode::Tab | KeyCode::BackTab | KeyCode::Up | KeyCode::Down
+                        ) {
+                            create.toggle_focus();
+                            outcome.repaint = true;
+                            return true;
+                        }
+                        if let Some(content_changed) = create.focused_editor_mut().handle_key(key) {
                             if content_changed {
                                 self.sync_worktree_create_path();
                             }
@@ -252,11 +262,17 @@ impl ClientShellState {
         }
         let branch = create.branch.trim().to_owned();
         if branch.is_empty() {
+            create.focus = ClientWorktreeCreateField::Branch;
             create.error = Some("branch is required".to_owned());
             outcome.repaint = true;
             return;
         }
         create.branch.trim_and_accept();
+        create.base.trim_and_accept();
+        let base = match create.base.as_str() {
+            "" => DEFAULT_WORKTREE_BASE.to_owned(),
+            base => base.to_owned(),
+        };
         create.checkout_path =
             checkout_path_preview(&worktree_directory, &create.repo_name, &branch);
         create.creating = true;
@@ -267,7 +283,7 @@ impl ClientShellState {
                 workspace_id: Some(workspace_id),
                 cwd: None,
                 branch: Some(branch),
-                base: Some("HEAD".to_owned()),
+                base: Some(base),
                 path: None,
                 label: None,
                 focus: false,
@@ -393,6 +409,8 @@ impl ClientShellState {
                         source_workspace_id: workspace_id,
                         repo_name: source.repo_name,
                         branch: TextEditor::new(&branch, true),
+                        base: TextEditor::new(DEFAULT_WORKTREE_BASE, true),
+                        focus: ClientWorktreeCreateField::Branch,
                         checkout_path,
                         error: None,
                         creating: false,

@@ -125,6 +125,7 @@ pub(super) struct ShellHitMap {
     pub(super) navigator_scroll_metrics: Option<crate::pane::ScrollMetrics>,
     pub(super) worktree_search: Rect,
     pub(super) worktree_rows: Vec<(Rect, usize)>,
+    pub(super) worktree_create_fields: Vec<(Rect, ClientWorktreeCreateField)>,
     pub(super) help_popup: Rect,
     pub(super) help_scrollbar: Rect,
     pub(super) help_scroll_metrics: Option<crate::pane::ScrollMetrics>,
@@ -427,9 +428,34 @@ pub(super) struct ClientWorktreeCreateOverlay {
     pub(super) source_workspace_id: String,
     pub(super) repo_name: String,
     pub(super) branch: TextEditor,
+    pub(super) base: TextEditor,
+    pub(super) focus: ClientWorktreeCreateField,
     pub(super) checkout_path: String,
     pub(super) error: Option<String>,
     pub(super) creating: bool,
+}
+
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
+pub(super) enum ClientWorktreeCreateField {
+    #[default]
+    Branch,
+    Base,
+}
+
+impl ClientWorktreeCreateOverlay {
+    pub(super) fn focused_editor_mut(&mut self) -> &mut TextEditor {
+        match self.focus {
+            ClientWorktreeCreateField::Branch => &mut self.branch,
+            ClientWorktreeCreateField::Base => &mut self.base,
+        }
+    }
+
+    pub(super) fn toggle_focus(&mut self) {
+        self.focus = match self.focus {
+            ClientWorktreeCreateField::Branch => ClientWorktreeCreateField::Base,
+            ClientWorktreeCreateField::Base => ClientWorktreeCreateField::Branch,
+        };
+    }
 }
 
 #[derive(Debug, Clone)]

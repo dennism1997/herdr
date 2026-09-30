@@ -5,7 +5,7 @@ pub(super) fn render_worktree_create_overlay(
     create: &ClientWorktreeCreateOverlay,
     p: &Palette,
 ) -> Option<OverlayRender> {
-    let popup = popup(b.area, 68, 12)?;
+    let popup = popup(b.area, 68, 15)?;
     let inner = panel(b, popup, p.accent, p.panel_bg)?;
     put_text(
         b,
@@ -18,26 +18,60 @@ pub(super) fn render_worktree_create_overlay(
             .bg(p.panel_bg)
             .add_modifier(Modifier::BOLD),
     );
-    put_text(
+    put_right_text(
         b,
-        inner.x,
-        inner.y + 2,
-        inner.width,
-        " branch",
+        Rect::new(inner.x, inner.y, inner.width, 1),
+        inner.y,
+        "tab switch field ",
         Style::default().fg(p.overlay0).bg(p.panel_bg),
     );
-    let input = Rect::new(inner.x, inner.y + 3, inner.width, 1);
-    b.set_style(input, Style::default().fg(p.text).bg(p.surface0));
-    let cursor = text_editor::render(
-        b,
-        Rect::new(input.x + 1, input.y, input.width.saturating_sub(1), 1),
-        &create.branch,
-        Style::default().fg(p.text).bg(p.surface0),
-    );
+    let mut field_hits = Vec::new();
+    let mut cursor = None;
+    for (offset, field, label, editor) in [
+        (
+            2,
+            ClientWorktreeCreateField::Branch,
+            " branch",
+            &create.branch,
+        ),
+        (
+            5,
+            ClientWorktreeCreateField::Base,
+            " based on",
+            &create.base,
+        ),
+    ] {
+        let focused = create.focus == field;
+        put_text(
+            b,
+            inner.x,
+            inner.y + offset,
+            inner.width,
+            label,
+            Style::default()
+                .fg(if focused { p.text } else { p.overlay0 })
+                .bg(p.panel_bg),
+        );
+        let input = Rect::new(inner.x, inner.y + offset + 1, inner.width, 1);
+        let style = Style::default()
+            .fg(if focused { p.text } else { p.subtext0 })
+            .bg(p.surface0);
+        b.set_style(input, style);
+        let field_cursor = text_editor::render(
+            b,
+            Rect::new(input.x + 1, input.y, input.width.saturating_sub(1), 1),
+            editor,
+            style,
+        );
+        if focused {
+            cursor = field_cursor;
+        }
+        field_hits.push((Rect::new(input.x, input.y - 1, input.width, 2), field));
+    }
     put_text(
         b,
         inner.x,
-        inner.y + 5,
+        inner.y + 8,
         inner.width,
         " checkout",
         Style::default().fg(p.overlay0).bg(p.panel_bg),
@@ -45,7 +79,7 @@ pub(super) fn render_worktree_create_overlay(
     put_text(
         b,
         inner.x,
-        inner.y + 6,
+        inner.y + 9,
         inner.width,
         &format!(" {}", create.checkout_path),
         Style::default().fg(p.subtext0).bg(p.panel_bg),
@@ -54,7 +88,7 @@ pub(super) fn render_worktree_create_overlay(
         put_text(
             b,
             inner.x,
-            inner.y + 8,
+            inner.y + 11,
             inner.width,
             " creating…",
             Style::default().fg(p.accent).bg(p.panel_bg),
@@ -63,13 +97,13 @@ pub(super) fn render_worktree_create_overlay(
         put_text(
             b,
             inner.x,
-            inner.y + 8,
+            inner.y + 11,
             inner.width,
             &format!(" {error}"),
             Style::default().fg(p.red).bg(p.panel_bg),
         );
     }
-    let buttons = row(inner, &[20, 12], 2, 9);
+    let buttons = row(inner, &[20, 12], 2, 12);
     let [primary, cancel] = buttons.as_slice() else {
         return None;
     };
@@ -101,6 +135,7 @@ pub(super) fn render_worktree_create_overlay(
         navigator_rows: Vec::new(),
         worktree_search: Rect::default(),
         worktree_rows: Vec::new(),
+        worktree_create_fields: field_hits,
         cursor: cursor.filter(|_| !create.creating),
         ..OverlayRender::default()
     })

@@ -49,6 +49,8 @@ fn modal_paste_target_requires_a_focused_editable_client_field() {
             source_workspace_id: "ws_1".into(),
             repo_name: "repo".into(),
             branch: TextEditor::default(),
+            base: TextEditor::default(),
+            focus: ClientWorktreeCreateField::Branch,
             checkout_path: String::new(),
             error: None,
             creating: true,

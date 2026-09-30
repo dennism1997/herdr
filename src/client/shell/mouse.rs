@@ -1477,6 +1477,21 @@ impl ClientShellState {
                             self.overlay = None;
                             outcome.repaint = true;
                         }
+                    } else if let Some((_, field)) = self
+                        .hits
+                        .worktree_create_fields
+                        .iter()
+                        .find(|(rect, _)| super::contains(*rect, point))
+                        .copied()
+                    {
+                        if let Some(ClientShellOverlay::WorktreeCreate(create)) =
+                            self.overlay.as_mut()
+                        {
+                            if !create.creating {
+                                create.focus = field;
+                                outcome.repaint = true;
+                            }
+                        }
                     } else if super::contains(self.hits.worktree_search, point) {
                         if let Some(ClientShellOverlay::WorktreeOpen(open)) = self.overlay.as_mut()
                         {
