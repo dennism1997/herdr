@@ -350,6 +350,12 @@ The title renders on the Herdr server, so `{hostname}` names the machine the pan
 
 `client.window_title.set` overrides the configured title until `client.window_title.clear` hands it back.
 
+In the personal fork, `{workspace}` uses the same live directory resolver as
+the workspace API and notification context, while preserving manually named
+workspaces. A `herdrdr` window-title override still takes precedence; disable
+that override to use the native template, for example
+`{workspace} · {terminal_title}`.
+
 Agent status uses compact colored dots by default. To distinguish blocked, working, done, idle, and unknown states by shape as well as color, choose **distinct symbols** in Settings or configure:
 
 ```toml
@@ -360,6 +366,15 @@ status_indicators = "symbols"
 The symbols are static, so this option does not enable spinner animation.
 
 ### Sidebar row layouts
+
+In the personal fork, related workspace metadata can expose clickable links.
+For example, when a plugin supplies `pr_number` and `pr_url`, a `$pr_number`
+row displays the number underlined and opens the URL on a left click while
+mouse capture is enabled. The same
+namespace convention links `$pr_status` to `pr_url`. Targets must be HTTP(S)
+URLs without credentials, whitespace, or control characters. Hit areas follow
+the visible, clipped label, including wide characters; overlays capture clicks
+before sidebar links. Existing plugins can keep supplying plain string tokens.
 
 The expanded desktop sidebar renders each inner array in `rows` as one line. These are the complete default layouts:
 
@@ -594,6 +609,7 @@ On Windows, support is currently limited to the Korean IME. With an IME for any 
 | Variable | Purpose |
 | --- | --- |
 | `HERDR_CONFIG_PATH` | Override the config file path. |
+| `HERDR_CONFIG_DIR` | Override Herdr's configuration root, including plugin configuration and named-session storage. Useful for a separate fork installation without changing other tools' XDG paths. |
 | `HERDR_SESSION` | Select a named session for CLI commands. |
 | `HERDR_SOCKET_PATH` | Low-level socket path override. |
 | `HERDR_PROCESS_DETECTION` | Linux process detection strategy: `native` (default) or opt-in `child-groups`. |

@@ -1,5 +1,148 @@
 use super::*;
 
+fn sidebar_link_state(url: &str) -> ClientShellState {
+    let mut config = Config::default();
+    config.ui.sidebar.spaces.rows = vec![vec![
+        crate::config::SpaceSidebarToken::Workspace,
+        crate::config::SpaceSidebarToken::Custom("pr_number".into()),
+    ]];
+    let mut projected = snapshot();
+    projected.workspaces[0].label = "界".into();
+    projected.workspaces[0].tokens = vec![
+        ("pr_number".into(), "#42".into()),
+        ("pr_url".into(), url.into()),
+    ];
+    let mut state = ClientShellState::new(ClientShellConfig::from_config(&config));
+    state.set_snapshot(Box::new(projected));
+    state.set_pane_surface(surface());
+    state.compose(106, 30).expect("sidebar links");
+    state
+}
+
+#[test]
+fn sidebar_link_click_opens_the_pr_with_unicode_labels() {
+    let url = "https://github.com/acme/app/pull/42";
+    let mut state = sidebar_link_state(url);
+    let (rect, target) = state.hits.sidebar_links.first().expect("PR link").clone();
+    assert_eq!(target, url);
+    assert_eq!(rect.width, 3);
+    let mut outcome = ClientShellInput::default();
+    state.handle_mouse(
+        MouseEvent {
+            kind: MouseEventKind::Down(MouseButton::Left),
+            column: rect.x,
+            row: rect.y,
+            modifiers: KeyModifiers::empty(),
+        },
+        &mut outcome,
+    );
+    assert!(
+        matches!(&outcome.actions[..], [ClientShellAction::OpenSafeWebUrl(target)] if target == url)
+    );
+}
+
+#[test]
+fn sidebar_link_overlay_and_removed_metadata_do_not_open_stale_urls() {
+    let mut state = sidebar_link_state("https://github.com/acme/app/pull/42");
+    let rect = state.hits.sidebar_links[0].0;
+    state.toggle_global_menu();
+    let mut outcome = ClientShellInput::default();
+    state.handle_mouse(
+        MouseEvent {
+            kind: MouseEventKind::Down(MouseButton::Left),
+            column: rect.x,
+            row: rect.y,
+            modifiers: KeyModifiers::empty(),
+        },
+        &mut outcome,
+    );
+    assert!(!outcome
+        .actions
+        .iter()
+        .any(|action| matches!(action, ClientShellAction::OpenSafeWebUrl(_))));
+    let mut projected = state.snapshot.as_deref().unwrap().clone();
+    projected.revision += 1;
+    projected.workspaces[0]
+        .tokens
+        .retain(|(key, _)| key != "pr_url");
+    state.set_snapshot(Box::new(projected));
+    let mut pane_surface = surface();
+    pane_surface.projection_revision = 2;
+    state.set_pane_surface(pane_surface);
+    state.compose(106, 30).expect("expired PR metadata");
+    assert!(state.hits.sidebar_links.is_empty());
+}
+
+#[test]
+fn sidebar_link_rejects_unsafe_or_malformed_web_targets() {
+    for url in [
+        "file:///tmp/a",
+        "javascript:alert(1)",
+        "https://",
+        "https://github.com/\ncontrol",
+        "https://user:secret@github.com/pr/42",
+    ] {
+        assert!(
+            sidebar_link_state(url).hits.sidebar_links.is_empty(),
+            "{url:?}"
+        );
+    }
+}
+
+#[test]
+fn global_menu_covers_underlines_from_sidebar_links() {
+    let mut config = Config::default();
+    config.ui.sidebar.spaces.rows =
+        vec![vec![crate::config::SpaceSidebarToken::Custom("pr_number".into())]; 8];
+    let mut projected = snapshot();
+    projected.workspaces[0].tokens = vec![
+        ("pr_number".into(), "#42".into()),
+        (
+            "pr_url".into(),
+            "https://github.com/acme/app/pull/42".into(),
+        ),
+    ];
+    let mut state = ClientShellState::new(ClientShellConfig::from_config(&config));
+    state.set_snapshot(Box::new(projected));
+    state.set_pane_surface(surface());
+    let before = state
+        .compose(106, 30)
+        .expect("linked rows")
+        .to_ratatui_buffer()
+        .unwrap();
+    state.toggle_global_menu();
+    let after = state
+        .compose(106, 30)
+        .expect("opaque menu")
+        .to_ratatui_buffer()
+        .unwrap();
+    let row = state.hits.global_menu_rows[0].0;
+    assert!(before[(4, row.y)].modifier.contains(Modifier::UNDERLINED));
+    for x in row.x..row.right() {
+        assert!(!after[(x, row.y)].modifier.contains(Modifier::UNDERLINED));
+    }
+}
+
+#[test]
+fn sidebar_link_hit_regions_stay_inside_the_rendered_row_when_clipped() {
+    let mut state = sidebar_link_state("https://github.com/acme/app/pull/42");
+    let mut projected = state.snapshot.as_deref().unwrap().clone();
+    projected.revision += 1;
+    projected.workspaces[0].tokens[0].1 = "#1234567890123456789012345678901234567890".into();
+    state.set_snapshot(Box::new(projected));
+    let mut pane_surface = surface();
+    pane_surface.projection_revision = 2;
+    state.set_pane_surface(pane_surface);
+    state.compose(106, 30).expect("clipped PR label");
+    assert!(!state.hits.sidebar_links.is_empty());
+    let row = state.hits.workspaces[0].rect;
+    for (link, _) in &state.hits.sidebar_links {
+        assert!(link.x >= row.x && link.right() <= row.right());
+        assert!(link.y >= row.y && link.bottom() <= row.bottom());
+        assert!(link.width < 40);
+    }
+}
+
 #[test]
 fn tab_overflow_controls_scroll_the_client_owned_tab_bar() {
     let mut snapshot = snapshot();
@@ -44,6 +187,33 @@ fn tab_overflow_controls_scroll_the_client_owned_tab_bar() {
     assert_eq!(state.hits.tabs.len(), 8);
     state.compose(80, 20).expect("focused tab after narrowing");
     assert!(state.hits.tabs.iter().any(|(_, tab_id)| tab_id == "tab_8"));
+}
+
+#[test]
+fn global_menu_scrolls_to_keep_keyboard_selected_plugin_actions_visible() {
+    let mut projected = snapshot();
+    projected.commands = (0..30)
+        .map(|index| crate::protocol::ClientShellCommand {
+            command_id: format!("plugin-{index}"),
+            binding_label: String::new(),
+            binding_labels: Vec::new(),
+            action: crate::protocol::ClientShellCommandAction::PluginAction,
+            description: Some(format!("Plugin action {index}")),
+        })
+        .collect();
+    let last = crate::client::shell::global_menu::global_menu_items(&projected).len() - 1;
+    let mut state = ClientShellState::new(ClientShellConfig::from_config(&Config::default()));
+    state.set_snapshot(Box::new(projected));
+    state.set_pane_surface(surface());
+    state.overlay = Some(ClientShellOverlay::GlobalMenu(ClientGlobalMenuOverlay {
+        highlighted: last,
+    }));
+    state.compose(106, 14).expect("scrolling menu");
+    assert_eq!(
+        state.hits.global_menu_rows.last().map(|(_, index)| *index),
+        Some(last)
+    );
+    assert!(state.handle_input_bytes(b"\r").detach);
 }
 
 #[test]

@@ -1020,6 +1020,25 @@ impl ClientShellState {
         if self.handle_mobile_mouse(mouse, outcome) {
             return;
         }
+        if mouse.kind == MouseEventKind::Down(MouseButton::Left)
+            && self.overlay.is_none()
+            && self.popup_terminal_id.is_none()
+            && self.chrome_drag.is_none()
+        {
+            if let Some((_, url)) = self
+                .hits
+                .sidebar_links
+                .iter()
+                .find(|(rect, _)| super::contains(*rect, point))
+            {
+                if crate::app::actions::safe_web_url(url).is_some() {
+                    outcome
+                        .actions
+                        .push(ClientShellAction::OpenSafeWebUrl(url.clone()));
+                    return;
+                }
+            }
+        }
         if mouse.kind == MouseEventKind::Drag(MouseButton::Left) {
             match self.chrome_drag.as_ref() {
                 Some(ClientChromeDrag::SidebarWidth) => {

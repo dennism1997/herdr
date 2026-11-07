@@ -115,8 +115,14 @@ pub(crate) fn render_global_menu(
     let rect = Rect::new(x, y, width, height);
     let inner = panel(buffer, rect, palette.accent, palette.panel_bg)?;
     let mut rows = Vec::new();
-    for (index, (label, action)) in items.iter().enumerate() {
-        let row_y = inner.y.saturating_add(index as u16);
+    let visible_rows = inner.height as usize;
+    let first = menu
+        .highlighted
+        .saturating_add(1)
+        .saturating_sub(visible_rows)
+        .min(items.len().saturating_sub(visible_rows));
+    for (offset, (index, (label, action))) in items.iter().enumerate().skip(first).enumerate() {
+        let row_y = inner.y.saturating_add(offset as u16);
         if row_y >= inner.bottom() {
             break;
         }
@@ -227,8 +233,12 @@ fn panel(
     if a.width < 2 || a.height < 2 {
         return None;
     }
-    let background = Style::default().bg(bg).remove_modifier(Modifier::DIM);
-    let border = Style::default().fg(c).bg(bg).remove_modifier(Modifier::DIM);
+    let covered_modifiers = Modifier::DIM | Modifier::UNDERLINED;
+    let background = Style::default().bg(bg).remove_modifier(covered_modifiers);
+    let border = Style::default()
+        .fg(c)
+        .bg(bg)
+        .remove_modifier(covered_modifiers);
     for y in a.y..a.bottom() {
         for x in a.x..a.right() {
             b[(x, y)].set_symbol(" ").set_style(background);

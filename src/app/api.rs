@@ -1893,6 +1893,12 @@ mod tests {
         }
         app.terminal_runtimes.insert(terminal_id, runtime);
 
+        app.configure_window_title("{workspace}");
+        assert_eq!(
+            app.window_title_for(0, 0).as_deref(),
+            Some("__herdr_projects__")
+        );
+
         app.handle_internal_event(AppEvent::StateChanged {
             pane_id: root,
             agent: Some(Agent::Codex),

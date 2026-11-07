@@ -86,7 +86,8 @@ impl App {
                 WindowTitlePart::Token(WindowTitleToken::Workspace) => {
                     if let Some(workspace) = workspace {
                         title.push_str(
-                            &workspace.display_name_from_terminals(&self.state.terminals),
+                            &workspace
+                                .display_name_from(&self.state.terminals, &self.terminal_runtimes),
                         );
                     }
                 }
@@ -172,6 +173,21 @@ mod tests {
         terminal.set_terminal_title(Some("⠋ building".into()));
 
         assert_eq!(app.window_title().as_deref(), Some("api|building"));
+    }
+
+    #[test]
+    fn background_titles_use_the_target_workspace_and_preserve_custom_names() {
+        let mut app = test_app();
+        app.state
+            .workspaces
+            .push(Workspace::test_new("Background project"));
+        app.state.ensure_test_terminals();
+        app.configure_window_title("{workspace}");
+        assert_eq!(app.window_title().as_deref(), Some("herd"));
+        assert_eq!(
+            app.window_title_for(1, 0).as_deref(),
+            Some("Background project")
+        );
     }
 
     #[test]

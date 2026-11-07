@@ -1,7 +1,7 @@
 # Upstream syncing
 
 This personal fork automatically merges `herdrdev/herdr:master` into
-`dennism1997/herdr:master` every six hours, at 00:17, 06:17, 12:17 and 18:17 UTC.
+`dennism1997/herdr:master` once a day, at 06:17 UTC.
 GitHub may delay scheduled runs. Run it immediately from **Actions → Sync
 upstream → Run workflow**, selecting `master`, or with:
 
@@ -27,3 +27,8 @@ tests run before every attempt; application CI can be run through a normal PR.
 
 For local validation, use `just sync-upstream-test`. The script itself must only
 run in a disposable checkout: it detaches HEAD at the current `origin/master`.
+
+The fork keeps four workflows: application CI, Nix checks, documentation and
+distribution-contract validation, and upstream syncing. Upstream publishing,
+website deployment, issue maintenance, PR intake gates, and standalone build
+workflows are not used by this fork.
