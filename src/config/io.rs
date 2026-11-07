@@ -28,6 +28,9 @@ pub fn app_dir_name() -> &'static str {
 }
 
 pub fn config_dir() -> PathBuf {
+    if let Some(dir) = std::env::var_os("HERDR_CONFIG_DIR").filter(|dir| !dir.is_empty()) {
+        return PathBuf::from(dir);
+    }
     if let Ok(dir) = std::env::var("XDG_CONFIG_HOME") {
         return PathBuf::from(dir).join(app_dir_name());
     }
@@ -749,6 +752,23 @@ fn upsert_section_raw(content: &str, section: &str, key: &str, value: &str) -> S
 
 #[cfg(test)]
 mod tests {
+    #[test]
+    fn dedicated_config_root_isolates_session_and_plugin_paths() {
+        let _guard = crate::config::test_config_env_lock().lock().unwrap();
+        let previous = std::env::var_os("HERDR_CONFIG_DIR");
+        let root = std::env::temp_dir().join("herdr2-config-root-test");
+        std::env::set_var("HERDR_CONFIG_DIR", &root);
+        assert_eq!(super::config_dir(), root);
+        assert_eq!(
+            crate::session::data_dir_for(Some("herdr2")),
+            root.join("sessions/herdr2")
+        );
+        assert!(crate::plugin_paths::plugin_config_dir("example.plugin").starts_with(&root));
+        match previous {
+            Some(value) => std::env::set_var("HERDR_CONFIG_DIR", value),
+            None => std::env::remove_var("HERDR_CONFIG_DIR"),
+        }
+    }
     use super::*;
 
     #[test]

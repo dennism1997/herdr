@@ -361,6 +361,32 @@ fn print_token_rule_profiles() {
     }
 }
 
+fn print_sidebar_link_profiles() {
+    let config: Config =
+        toml::from_str("[ui.sidebar.spaces]\nrows = [['workspace', '$pr_number']]")
+            .expect("sidebar link benchmark config");
+    for linked in [false, true] {
+        let rows = [1, 15].map(|count| {
+            let mut pipeline = RenderPipeline::with_config(workspaces(count), &config);
+            let mut snapshot =
+                super::client_shell::snapshot(&pipeline.app, "bench-boot", 1, None, None);
+            for workspace in &mut snapshot.workspaces {
+                workspace.tokens.push(("pr_number".into(), "#42".into()));
+                if linked {
+                    workspace.tokens.push((
+                        "pr_url".into(),
+                        "https://github.com/example/repo/pull/42".into(),
+                    ));
+                }
+            }
+            pipeline.client.set_snapshot(Box::new(snapshot));
+            (count, profile_pipeline(pipeline))
+        });
+        println!("sidebar metadata links: enabled={linked}");
+        print_stage("client shell composition", &rows, |stats| stats.client);
+    }
+}
+
 #[derive(Clone, Copy)]
 enum SurfaceDamagePattern {
     Dense,
@@ -611,6 +637,7 @@ async fn render_scale_profile() {
     print_profiles("active panes (one workspace)", active_panes);
     print_snapshot_encoding_profiles("active panes", active_panes);
     print_token_rule_profiles();
+    print_sidebar_link_profiles();
     print_surface_reuse_profiles();
     print_surface_damage_profiles();
 }

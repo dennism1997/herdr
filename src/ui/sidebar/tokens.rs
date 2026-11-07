@@ -7,6 +7,7 @@ use crate::config::{
 pub(crate) struct ResolvedToken {
     pub kind: ResolvedTokenKind,
     pub style: SidebarTokenStyle,
+    pub link: Option<String>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -43,13 +44,41 @@ impl ResolvedTokenKind {
 
 impl ResolvedToken {
     fn new(kind: ResolvedTokenKind, style: SidebarTokenStyle) -> Self {
-        Self { kind, style }
+        Self {
+            kind,
+            style,
+            link: None,
+        }
     }
 
     #[cfg(test)]
     pub(super) fn unstyled(kind: ResolvedTokenKind) -> Self {
         Self::new(kind, SidebarTokenStyle::default())
     }
+}
+
+/// Related metadata labels share a namespace: `pr_number` and `pr_status`
+/// can link to `pr_url`. Existing clients keep displaying the plain text.
+fn custom_token_link(
+    name: &str,
+    tokens: &std::collections::HashMap<String, String>,
+) -> Option<String> {
+    let namespace = name
+        .rsplit_once('_')
+        .map_or(name, |(namespace, _)| namespace);
+    let url = tokens.get(&format!("{namespace}_url"))?;
+    let authority = url
+        .strip_prefix("https://")
+        .or_else(|| url.strip_prefix("http://"))?
+        .split(['/', '?', '#'])
+        .next()?;
+    if authority.is_empty()
+        || authority.contains('@')
+        || url.chars().any(|ch| ch.is_control() || ch.is_whitespace())
+    {
+        return None;
+    }
+    Some(url.clone())
 }
 
 pub(crate) struct AgentTokenContext<'a> {
@@ -169,7 +198,11 @@ pub(crate) fn space_rows(
                     let style = kind
                         .text_value()
                         .map_or(Some(style), |value| configured.style_for_value(value))?;
-                    Some(ResolvedToken::new(kind, style))
+                    let mut resolved = ResolvedToken::new(kind, style);
+                    if let SpaceSidebarToken::Custom(name) = token {
+                        resolved.link = custom_token_link(name, context.tokens);
+                    }
+                    Some(resolved)
                 })
                 .collect::<Vec<_>>();
             (!resolved.is_empty()).then_some(resolved)

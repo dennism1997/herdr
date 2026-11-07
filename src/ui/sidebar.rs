@@ -113,6 +113,34 @@ pub(crate) fn resolved_token_spans(
     palette: &Palette,
     max_width: usize,
 ) -> Vec<Span<'static>> {
+    resolved_token_line(
+        resolved,
+        state_icon,
+        state_text_style,
+        workspace_style,
+        secondary_style,
+        custom_style,
+        palette,
+        max_width,
+    )
+    .spans
+}
+
+pub(crate) struct ResolvedTokenLine {
+    pub spans: Vec<Span<'static>>,
+    pub links: Vec<(std::ops::Range<usize>, String)>,
+}
+
+pub(crate) fn resolved_token_line(
+    resolved: &[ResolvedToken],
+    state_icon: (&str, Style),
+    state_text_style: Style,
+    workspace_style: Style,
+    secondary_style: Style,
+    custom_style: Style,
+    palette: &Palette,
+    max_width: usize,
+) -> ResolvedTokenLine {
     let fixed_widths = resolved
         .iter()
         .map(|token| match &token.kind {
@@ -213,6 +241,9 @@ pub(crate) fn resolved_token_spans(
     }
 
     let mut spans = Vec::new();
+    let mut links = Vec::new();
+    let has_links = resolved.iter().any(|token| token.link.is_some());
+    let mut column = 0;
     for (position, index) in visible_indices.iter().copied().enumerate() {
         let token = &resolved[index];
         if position > 0 {
@@ -221,7 +252,11 @@ pub(crate) fn resolved_token_spans(
                 tokens::separator(previous, token),
                 Style::default().fg(palette.overlay0),
             ));
+            if has_links {
+                column += spans.last().map_or(0, Span::width);
+            }
         }
+        let first_span = spans.len();
         match &token.kind {
             ResolvedTokenKind::StateIcon => spans.push(Span::styled(
                 state_icon.0.to_string(),
@@ -270,8 +305,22 @@ pub(crate) fn resolved_token_spans(
                 ));
             }
         }
+        let end = if has_links {
+            column + spans[first_span..].iter().map(Span::width).sum::<usize>()
+        } else {
+            column
+        };
+        if let Some(url) = &token.link {
+            if end > column {
+                for span in &mut spans[first_span..] {
+                    span.style = span.style.add_modifier(Modifier::UNDERLINED);
+                }
+                links.push((column..end, url.clone()));
+            }
+        }
+        column = end;
     }
-    spans
+    ResolvedTokenLine { spans, links }
 }
 
 fn apply_token_style(mut style: Style, patch: crate::config::SidebarTokenStyle) -> Style {

@@ -475,11 +475,14 @@ pub(super) fn render_expanded(
                     config.status_indicators,
                     entry,
                     tokens,
-                    endpoint_active && workspace.focused,
-                    selected,
-                    state.selected_workspace_id.is_some(),
-                    false,
+                    super::sidebar::WorkspaceRowState {
+                        focused: endpoint_active && workspace.focused,
+                        selected,
+                        navigating: state.selected_workspace_id.is_some(),
+                        dragged: false,
+                    },
                     palette,
+                    &mut hits.sidebar_links,
                 );
                 if endpoint.status != ClientEndpointStatus::Online {
                     buffer.set_style(

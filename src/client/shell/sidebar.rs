@@ -328,11 +328,14 @@ pub(crate) fn render_sidebar(
             config.status_indicators,
             entry,
             rows,
-            workspace.focused,
-            selected,
-            state.selected_workspace_id.is_some(),
-            dragged,
+            WorkspaceRowState {
+                focused: workspace.focused,
+                selected,
+                navigating: state.selected_workspace_id.is_some(),
+                dragged,
+            },
             palette,
+            &mut hits.sidebar_links,
         );
         let group_toggle = render_parent_group_toggle(
             buffer,
@@ -689,6 +692,13 @@ pub(in crate::client::shell) fn workspace_rows(
     )
 }
 
+pub(in crate::client::shell) struct WorkspaceRowState {
+    pub focused: bool,
+    pub selected: bool,
+    pub navigating: bool,
+    pub dragged: bool,
+}
+
 pub(in crate::client::shell) fn render_workspace_rows(
     buffer: &mut Buffer,
     area: Rect,
@@ -696,12 +706,16 @@ pub(in crate::client::shell) fn render_workspace_rows(
     indicators: crate::config::StatusIndicatorStyle,
     entry: &WorkspaceEntry,
     rows: Vec<Vec<crate::ui::ResolvedToken>>,
-    focused: bool,
-    selected: bool,
-    navigating: bool,
-    dragged: bool,
+    state: WorkspaceRowState,
     palette: &Palette,
+    links: &mut Vec<(Rect, String)>,
 ) {
+    let WorkspaceRowState {
+        focused,
+        selected,
+        navigating,
+        dragged,
+    } = state;
     for (row_index, row) in rows.iter().enumerate() {
         let y = area.y + row_index as u16;
         if y >= area.bottom() {
@@ -750,7 +764,7 @@ pub(in crate::client::shell) fn render_workspace_rows(
         } else {
             palette.overlay0
         });
-        let spans = crate::ui::resolved_token_spans(
+        let line = crate::ui::resolved_token_line(
             row,
             (
                 status_icon(status, indicators),
@@ -763,7 +777,18 @@ pub(in crate::client::shell) fn render_workspace_rows(
             palette,
             area.right().saturating_sub(2).saturating_sub(x) as usize,
         );
-        Paragraph::new(Line::from(spans)).render(
+        for (range, url) in line.links {
+            links.push((
+                Rect::new(
+                    x.saturating_add(range.start as u16),
+                    y,
+                    (range.end - range.start) as u16,
+                    1,
+                ),
+                url,
+            ));
+        }
+        Paragraph::new(Line::from(line.spans)).render(
             Rect::new(x, y, area.right().saturating_sub(2).saturating_sub(x), 1),
             buffer,
         );
