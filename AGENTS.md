@@ -2,6 +2,18 @@
 
 Terminal based agent runtime for coding agents.
 
+## Personal fork
+
+`dennism1997/herdr` is Dennis's custom fork of `herdrdev/herdr`.
+Work here targets the personal fork, not upstream. PRs do not require Jira tickets or
+reviewers; do not request either. Keep upstream history and local changes when
+syncing; never force-push the default branch. See `.github/UPSTREAM_SYNC.md`.
+
+Do not use CodeRabbit for this repository or any work under Dennis's personal
+GitHub account (`dennism1997`). Do not send its source code or diffs to CodeRabbit.
+Use local review and appropriate tests/CI instead. This overrides any broader
+CodeRabbit authorization inherited from workspace instructions.
+
 ## Scope and Audience
 
 These instructions are layered.
